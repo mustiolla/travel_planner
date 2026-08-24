@@ -16,28 +16,31 @@
 
 ## 🔄 전체 흐름도
 
-```
-mermaid
+```mermaid
 flowchart TD
     A([👤 사용자 입력\n날짜 선택]) --> B
 
     B["🏙️ 1단계: 도시 추천\n2~3개 도시 선정"]
-    B -- "OpenAI API\n날짜 기반 테마/행정구역 다양성 고려" --> B
+    B --> B_api["🤖 OpenAI API\n날짜 기반 테마/행정구역 다양성 고려"]
+    B_api --> LOOP
 
-    B --> LOOP["🔁 도시별 반복 처리"]
+    LOOP["🔁 도시별 반복 처리"] --> C
 
-    LOOP --> C["📅 2단계: 일정 추천\n오전 / 오후 / 저녁"]
-    C -- "OpenAI API\n도시 + 테마 + 날짜 기반 생성" --> C
+    C["📅 2단계: 일정 추천\n오전 / 오후 / 저녁"]
+    C --> C_api["🤖 OpenAI API\n도시 + 테마 + 날짜 기반 생성"]
+    C_api --> D
 
-    C --> D["🍽️ 3단계: 맛집 검색\n5~10곳 반환"]
-    D -- "Kakao 로컬 API\n위도/경도/주소/카테고리 포함" --> D
+    D["🍽️ 3단계: 맛집 검색\n5~10곳 반환"]
+    D --> D_api["🗺️ Kakao 로컬 API\n위도/경도/주소/카테고리 포함"]
+    D_api --> E
 
-    D --> E["📄 4단계: 도시별 리포트 생성\n추천이유 / 날씨 / 행사 / 맛집 / 일정"]
+    E["📄 4단계: 도시별 리포트 생성\n추천이유 / 날씨 / 행사 / 맛집 / 일정"]
+    E --> F
 
-    E --> F["📊 5단계: 전체 요약 리포트\n도시 비교 테이블 + 링크"]
+    F["📊 5단계: 전체 요약 리포트\n도시 비교 테이블 + 링크"]
+    F --> G
 
-    F --> G["💾 6단계: 파일 저장\nMD + JSON 저장"]
-
+    G["💾 6단계: 파일 저장\nMD + JSON 저장"]
     G --> H([✅ 완료])
 
     style A fill:#4CAF50,color:#fff
@@ -49,6 +52,9 @@ flowchart TD
     style F fill:#9C27B0,color:#fff
     style G fill:#607D8B,color:#fff
     style LOOP fill:#333,color:#fff,stroke:#888
+    style B_api fill:#E3F2FD,color:#333
+    style C_api fill:#E3F2FD,color:#333
+    style D_api fill:#FFF3E0,color:#333
 ```
 
 ---
