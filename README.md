@@ -1,16 +1,20 @@
 # 🗺️ 국내 여행 추천 프로그램
 
-> OpenAI + Kakao API를 활용한 AI 기반 국내 여행 추천 자동화 시스템
+> OpenAI(gpt-4o-mini) + Kakao Local API를 활용한 AI 기반 국내 여행 추천 자동화 시스템으로, 여행 날짜에 최적화된 국내 대표 명소 및 숨은 소도시를 추천하고 일정별 맛집 동선까지 계산해 리포트를 자동 생성하는 파이프라인입니다.
 
 ---
 
-## 📌 프로그램 개요
+
+## 📌 프로그램 개요 및 특징
 
 날짜를 입력하면 AI가 자동으로:
-1. 여행하기 좋은 국내 도시 **2~3곳** 추천
-2. 도시별 **1일 여행 일정** (오전/오후/저녁) 생성
-3. 도시별 **맛집 5~10곳** 검색 (위치 정보 포함)
-4. 도시별 **상세 리포트** + **전체 요약 리포트** 자동 저장
+
+* **차별화된 도시 구성**: 1곳의 대표 인기 관광지와 2곳의 한적한 숨은 소도시/군 단위 지역을 조합하여 폭넓은 여행 선택지를 제공합니다.
+* **추천 다양성 고도화**: `temperature(0.95)` 및 `presence_penalty(0.6)`를 적용하여 날짜별·실행별 고정된 도시 중복 추천을 최소화합니다.
+* **장소-맛집 근접 동선 연계**: 도시별 '1일 여행 일정(오전/오후/저녁)' 생성과 장소와 카카오 API로 수집된 맛집 간의 직선 거리를 계산하고 최단 거리 맛집을 자동 매칭합니다.
+* **정밀 위치 데이터 규격화**: 위도/경도 좌표를 소수점 5자리(약 1.1m 정밀도)로 반올림 처리하여 데이터 가독성을 높였습니다.
+* **상세 리포트** + **전체 요약 리포트** 자동 생성 및 저장 
+
 
 ---
 
@@ -18,61 +22,38 @@
 
 ```mermaid
 flowchart TD
-    A([👤 사용자 입력\n날짜 선택]) --> B
+    %% 커스텀 색상 및 스타일 정의
+    classDef inputNode fill:#E1F5FE,stroke:#0288D1,stroke-width:2px,color:#01579B,font-weight:bold,rx:15
+    classDef aiNode fill:#F3E5F5,stroke:#8E24AA,stroke-width:2px,color:#4A148C,rx:10
+    classDef apiNode fill:#FFF8E1,stroke:#FFA000,stroke-width:2px,color:#FF6F00,rx:10
+    classDef docNode fill:#E8F5E9,stroke:#388E3C,stroke-width:2px,color:#1B5E20,rx:10
+    classDef saveNode fill:#ECEFF1,stroke:#546E7A,stroke-width:2px,color:#263238,rx:5
+    classDef endNode fill:#4CAF50,stroke:#388E3C,stroke-width:2px,color:#FFFFFF,font-weight:bold,rx:20
 
-    B["🏙️ 1단계: 도시 추천\n2~3개 도시 선정"]
-    B --> B_api["🤖 OpenAI API\n날짜 기반 테마/행정구역 다양성 고려"]
-    B_api --> LOOP
+    %% 노드 정의
+    A([👤 사용자 입력<br/>--date YYYY-MM-DD]) ::: inputNode
+    
+    B["🤖 1단계: 도시 추천<br/>(대표 1곳 + 소도시 2곳)"] ::: aiNode
+    C["🤖 2단계: 1일 일정 생성<br/>(오전/오후/저녁)"] ::: aiNode
+    
+    D["🗺️ 3단계: 맛집 검색<br/>(Kakao Local API)"] ::: apiNode
+    E["🧭 동선 매칭<br/>(일정 장소 ↔ 최단거리 맛집)"] ::: apiNode
+    
+    F["📄 4단계: 도시별 상세 리포트<br/>(개별 MD 문서)"] ::: docNode
+    G["📊 5단계: 통합 요약 리포트<br/>(비교 표 + 링크)"] ::: docNode
+    
+    H[/"💾 6단계: 결과물 저장<br/>(.md & .json)"/] ::: saveNode
+    I([✅ 추천 프로세스 완료]) ::: endNode
 
-    LOOP["🔁 도시별 반복 처리"] --> C
-
-    C["📅 2단계: 일정 추천\n오전 / 오후 / 저녁"]
-    C --> C_api["🤖 OpenAI API\n도시 + 테마 + 날짜 기반 생성"]
-    C_api --> D
-
-    D["🍽️ 3단계: 맛집 검색\n5~10곳 반환"]
-    D --> D_api["🗺️ Kakao 로컬 API\n위도/경도/주소/카테고리 포함"]
-    D_api --> E
-
-    E["📄 4단계: 도시별 리포트 생성\n추천이유 / 날씨 / 행사 / 맛집 / 일정"]
-    E --> F
-
-    F["📊 5단계: 전체 요약 리포트\n도시 비교 테이블 + 링크"]
-    F --> G
-
-    G["💾 6단계: 파일 저장\nMD + JSON 저장"]
-    G --> H([✅ 완료])
-
-    style A fill:#4CAF50,color:#fff
-    style H fill:#4CAF50,color:#fff
-    style B fill:#2196F3,color:#fff
-    style C fill:#2196F3,color:#fff
-    style D fill:#FF9800,color:#fff
-    style E fill:#9C27B0,color:#fff
-    style F fill:#9C27B0,color:#fff
-    style G fill:#607D8B,color:#fff
-    style LOOP fill:#333,color:#fff,stroke:#888
-    style B_api fill:#E3F2FD,color:#333
-    style C_api fill:#E3F2FD,color:#333
-    style D_api fill:#FFF3E0,color:#333
-```
-
----
-
-## 🏗️ 코드 구성
-
-```
-travel_planner/
-├── travel_planner.py     ← 메인 실행 파일
-├── .env                  ← API 키 설정 (Git 제외)
-├── .env.example          ← API 키 예시 템플릿
-├── requirements.txt      ← 필요 패키지 목록
-├── logs/                 ← 실행 로그 저장
-│   └── travel_YYYYMMDD.log
-└── results/              ← 결과 파일 저장
-    ├── summary_YYYY-MM-DD.md
-    ├── report_YYYY-MM-DD_도시명.md
-    └── raw_YYYY-MM-DD.json
+    %% 연결선 (흐름)
+    A ==>|파이썬 실행| B
+    B ==>|3개 도시 루프| C
+    C ==> D
+    D -. "위도/경도 데이터" .-> E
+    E ==> F
+    F ==> G
+    G ==> H
+    H ==> I
 ```
 
 ### 📄 travel_planner.py 함수 구성
@@ -123,14 +104,14 @@ travel_planner.py
 ```
 # 🗺️ YYYY-MM-DD 국내 여행 추천 요약
 
-## 📍 추천 도시 비교
+## 📍 추천 3개 도시 메타데이터 비교 테이블
 | 도시 | 행정구역 | 테마 | 날씨 | 맛집 수 |
 |------|----------|------|------|---------|
 | 제주도 | 제주특별자치도 | 자연 | 맑음 25도 | 10곳 |
 | 경주  | 경상북도       | 역사 | 맑음 28도 | 8곳  |
 | 부산  | 부산광역시     | 해양 | 맑음 27도 | 9곳  |
 
-## 도시별 요약 + 상세 리포트 링크
+## 도시별 핵심 요약 및 개별 리포트 파일 링크
 ```
 
 ### 2. `report_YYYY-MM-DD_도시명.md` - 도시별 상세 리포트
@@ -141,11 +122,12 @@ travel_planner.py
 1️⃣ 추천 지역 & 추천 이유   ← 도시/행정구역/테마/추천이유 표
 2️⃣ 날씨 요약               ← 날씨 한 줄 요약
 3️⃣ 행사/축제 목록           ← 해당 날짜 주변 행사
-4️⃣ 맛집 리스트              ← 상호명/카테고리/주소/위도/경도/링크
-5️⃣ 1일 여행 일정            ← 오전/오후/저녁 활동/장소/팁
+4️⃣ 맛집 리스트              ← 상호명/카테고리/별점/주소/좌표(위도&경도)/링크
+5️⃣ 1일 여행 일정 및 알정 정소별 최단 거리 추천 맛집 매팅 표기   ← 오전/오후/저녁 활동/장소/팁
 ```
 
-### 3. `raw_YYYY-MM-DD.json` - 원본 데이터
+### 3. `raw_YYYY-MM-DD.json` - 원본 JSON 데이터
+* 추천 정보, 일정, 맛집 전체 파싱 원천 데이터
 
 ```json
 {

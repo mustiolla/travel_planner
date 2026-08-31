@@ -19,3 +19,7 @@ Thumbs.db
 
 # VSCode
 .vscode/
+
+# .gitignore 파일 열어서 아래 추가
+logs/
+*.log
