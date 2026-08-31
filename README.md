@@ -64,44 +64,38 @@ flowchart TD
     H ==> I
 ```
 
-### 📄 travel_planner.py 함수 구성
+### 📄 travel_planner.py 프로젝트 구조
 
 ```
-travel_planner.py
-│
-├── CONFIG                      환경변수 로드 (API 키, 경로 설정)
-├── parse_args()                CLI 인자 파싱 (--date)
-│
-├── recommend_cities()          1단계: OpenAI로 도시 2~3개 추천
-│   └── OpenAI Chat API 호출
-│       └── JSON 파싱 (도시명/행정구역/테마/날씨/행사/추천이유)
-│
-├── recommend_schedule()        2단계: OpenAI로 1일 일정 생성
-│   └── OpenAI Chat API 호출
-│       └── JSON 파싱 (오전/오후/저녁 시간/활동/장소/팁)
-│
-├── search_restaurants()        3단계: Kakao API로 맛집 검색
-│   └── Kakao 로컬 API 호출
-│       └── 위도/경도/주소/카테고리/URL 파싱
-│
-├── build_city_report()         4단계: 도시별 Markdown 리포트 생성
-│   ├── 추천 지역 & 이유 (표)
-│   ├── 날씨 요약
-│   ├── 행사/축제 목록
-│   ├── 맛집 리스트 (표)
-│   └── 1일 일정 (오전/오후/저녁)
-│
-├── build_summary_report()      5단계: 전체 요약 리포트 생성
-│   ├── 도시 비교 테이블
-│   └── 도시별 요약 + 상세 리포트 링크
-│
-├── save_results()              6단계: 파일 저장
-│   ├── report_날짜_도시.md (도시별)
-│   ├── summary_날짜.md (전체 요약)
-│   └── raw_날짜.json (원본 데이터)
-│
-└── main()                      전체 흐름 제어
+travel_planner/
+├── travel_planner.py      ← 메인 실행 파일
+├── requirements.txt       ← 프로그램 실행에 필요한 외부 파이썬 패키지 목록
+├── .env.example           ← API 키 입력 방법을 안내하는 템플릿 파일
+├── .env                   ← 실제 API 키가 저장되는 파일 (Git 업로드 제외)
+├── logs/                  ← 실행 로그 저장 디렉토리
+│   └── run_YYYYMMDD.log
+└── results/               ← 결과물 생성 디렉토리
+    ├── summary_YYYY-MM-DD.md
+    ├── report_YYYY-MM-DD_도시명.md
+    └── raw_YYYY-MM-DD.json
 ```
+
+---
+
+## ⚙️ 핵심 함수 구성
+
+| 함수명 | 역할 |
+|---|---|
+| `parse_args()` | CLI 실행 인자(`--date`) 파싱 |
+| `calculate_distance()` | Haversine 수식을 통한 두 좌표 간 직선 거리(km) 계산 |
+| `get_place_coordinate()` | 일정 장소명을 카카오 로컬 API로 검색해 위도/경도 좌표 반환 |
+| `recommend_cities()` | OpenAI를 통해 대표 도시 1곳 + 숨은 소도시 2곳 추천 |
+| `recommend_schedule()` | OpenAI를 통해 오전/오후/저녁 1일 여행 일정 생성 |
+| `search_restaurants()` | Kakao API로 맛집 5~10곳 검색 (별점 및 소수점 5자리 좌표) |
+| `build_city_report()` | 맛집 리스트 및 근접 맛집이 연결된 도시별 마크다운 생성 |
+| `build_summary_report()`| 추천 도시 비교표가 포함된 전체 요약 마크다운 생성 |
+| `save_results()` | 생성된 리포트(.md) 및 원본 데이터(.json) 파일 저장 |
+---
 
 ---
 
@@ -174,20 +168,27 @@ travel_planner.py
 
 ## ⚙️ 설치 및 실행
 
-### 1. 패키지 설치
+### 1. 패키지 설치(requirements.txt)
+requirements.txt 파일에는 이 프로그램이 작동하기 위해 필요한 외부 라이브러리(OpenAI, dotenv 등)의 목록이 적혀 있습니다. 터미널에 아래 명령어를 입력하면 필요한 패키지가 한 번에 설치됩니다
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. API 키 설정 (`.env`)
+### 2. 환경변수 설정 (.env.example ➔ .env)
+.env.example 파일은 어떤 API 키가 필요한지 보여주기 위한 '예시(템플릿)' 파일입니다. 실제 키를 설정하려면 다음 과정을 거쳐야 합니다.
+
+프로젝트 폴더에 .env 라는 이름의 새 파일을 만듭니다. (또는 .env.example을 복사하여 .env로 이름을 변경합니다.)
+
+발급받은 실제 API 키를 .env 파일 안에 붙여넣고 저장합니다.
 
 ```env
 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
 KAKAO_REST_API_KEY=xxxxxxxxxxxxxxxx
 ```
 
-### 3. 실행
+
+### 3. 프로그램 실행
 
 ```bash
 # 날짜 지정 실행
