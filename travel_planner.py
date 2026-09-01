@@ -55,8 +55,18 @@ logging.basicConfig(
 # =============================================
 def parse_args():
     parser = argparse.ArgumentParser(description="국내 여행 추천")
-    parser.add_argument("--date", required=True, help="여행 날짜 (YYYY-MM-DD)")
-    return parser.parse_args()
+    # 요구사항에 맞게 '-date' 옵션 지원
+    parser.add_argument("-date", dest="date", required=True, help="여행 날짜 (YYYY-MM-DD)")
+    args = parser.parse_args()
+    
+    # 📌 날짜 형식 검증 추가
+    try:
+        datetime.strptime(args.date, "%Y-%m-%d")
+    except ValueError:
+        print("❌ 오류: 날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식으로 입력해주세요. (예: 2024-05-05)")
+        sys.exit(1)
+        
+    return args
 
 
 def _safe_json(text):
@@ -157,6 +167,9 @@ def recommend_cities(date_str):
                 cities = [c.get("city", "") for c in parsed]
                 logging.info(f"도시 추천 성공: {', '.join(cities)}")
                 return parsed[:3]
+            else:
+                # 📌 이 부분을 추가해야 except 블록으로 넘어가서 정상적으로 재시도(time.sleep)를 합니다.
+                raise ValueError("JSON 파싱 실패 또는 반환 형태가 올바르지 않음")
 
         except Exception as e:
             logging.warning(f"도시추천 재시도 {i+1}/{CONFIG['MAX_RETRIES']}: {e}")
@@ -214,6 +227,9 @@ def recommend_schedule(city, theme, date_str):
             if parsed and "morning" in parsed:
                 logging.info(f"[{city}] 일정 추천 성공")
                 return parsed
+            else:
+                # 📌 이 부분을 추가해야 except 블록으로 넘어가서 정상적으로 재시도(time.sleep)를 합니다.
+                raise ValueError("JSON 파싱 실패 또는 반환 형태가 올바르지 않음")
         except Exception as e:
             logging.warning(f"[{city}] 일정 재시도 {i+1}: {e}")
             time.sleep(1)
@@ -414,7 +430,7 @@ def build_summary_report(date_str, cities_data):
 # =============================================
 # 6단계: 결과 저장
 # =============================================
-def save_results(date_str, cities_data, summary_md):
+def save_results(date_str, cities_data, summary_md, errors):
     out_dir = CONFIG["RESULTS_DIR"]
     saved_files = []
 
@@ -435,6 +451,7 @@ def save_results(date_str, cities_data, summary_md):
 
     raw_data = {
         "date": date_str,
+        "errors": errors,
         "cities": [
             {
                 "info":        item["info"],
@@ -459,6 +476,7 @@ def save_results(date_str, cities_data, summary_md):
 def main():
     args     = parse_args()
     date_str = args.date
+    global_errors = [] # 📌 발생한 에러를 담을 리스트 추가
 
     logging.info(f"===== 여행 추천 시작 (날짜: {date_str}) =====")
 
@@ -505,9 +523,9 @@ def main():
     logging.info("5단계: 전체 요약 리포트 생성 중...")
     summary_md = build_summary_report(date_str, cities_data)
 
-    # 6단계: 저장
+    # 6단계: 저장할 때 errors 리스트도 넘겨주기
     logging.info("6단계: 결과 저장 중...")
-    saved_files = save_results(date_str, cities_data, summary_md)
+    saved_files = save_results(date_str, cities_data, summary_md, global_errors)
 
     print("\n" + "="*40)
     print("✅ 완료!")
