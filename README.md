@@ -37,7 +37,6 @@
 
 ```mermaid
 flowchart TD
-    %% 커스텀 색상 및 스타일 정의
     classDef inputNode fill:#E1F5FE,stroke:#0288D1,stroke-width:2px,color:#01579B,font-weight:bold
     classDef aiNode fill:#F3E5F5,stroke:#8E24AA,stroke-width:2px,color:#4A148C
     classDef apiNode fill:#FFF8E1,stroke:#FFA000,stroke-width:2px,color:#FF6F00
@@ -45,18 +44,16 @@ flowchart TD
     classDef saveNode fill:#ECEFF1,stroke:#546E7A,stroke-width:2px,color:#263238
     classDef endNode fill:#4CAF50,stroke:#388E3C,stroke-width:2px,color:#FFFFFF,font-weight:bold
 
-    %% 노드 정의
-    A([👤 사용자 입력<br/>--date YYYY-MM-DD])
+    A["👤 사용자 입력<br/>--date YYYY-MM-DD"]
     B["🤖 1단계: 도시 추천<br/>(대표 1곳 + 소도시 2곳)"]
     C["🤖 2단계: 1일 일정 생성<br/>(오전/오후/저녁)"]
     D["🗺️ 3단계: 맛집 검색<br/>(Kakao Local API)"]
     E["🧭 동선 매칭<br/>(일정 장소 ↔ 최단거리 맛집)"]
     F["📄 4단계: 도시별 상세 리포트<br/>(개별 MD 문서)"]
     G["📊 5단계: 통합 요약 리포트<br/>(비교 표 + 링크)"]
-    H[/"💾 6단계: 결과물 저장<br/>(.md & .json)"/]
-    I([✅ 추천 프로세스 완료])
+    H["💾 6단계: 결과물 저장<br/>(.md & .json)"]
+    I["✅ 추천 프로세스 완료"]
 
-    %% 스타일 적용
     class A inputNode
     class B,C aiNode
     class D,E apiNode
@@ -64,15 +61,14 @@ flowchart TD
     class H saveNode
     class I endNode
 
-    %% 연결선 (흐름)
-    A ==>|파이썬 실행| B
-    B ==>|3개 도시 루프| C
-    C ==> D
-    D -.->|위도/경도 데이터| E
-    E ==> F
-    F ==> G
-    G ==> H
-    H ==> I
+    A -->|파이썬 실행| B
+    B -->|3개 도시 루프| C
+    C --> D
+    D -. 위도/경도 데이터 .-> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
 ```
 
 ### 📄 travel_planner.py 프로젝트 구조
