@@ -31,11 +31,7 @@
 * **직관적인 CLI 및 입력 검증**
   터미널에서 `-date "YYYY-MM-DD"` 명령어 하나로 구동되며, 날짜 오입력 시 즉각적인 검증 안내를 제공하여 사용자 편의성을 높였습니다.
 
-
-
 ---
-
-
 
 ## 🔄 전체 흐름도
 
@@ -51,16 +47,12 @@ flowchart TD
 
     %% 노드 정의
     A([👤 사용자 입력<br/>--date YYYY-MM-DD])
-    
     B["🤖 1단계: 도시 추천<br/>(대표 1곳 + 소도시 2곳)"]
     C["🤖 2단계: 1일 일정 생성<br/>(오전/오후/저녁)"]
-    
     D["🗺️ 3단계: 맛집 검색<br/>(Kakao Local API)"]
     E["🧭 동선 매칭<br/>(일정 장소 ↔ 최단거리 맛집)"]
-    
     F["📄 4단계: 도시별 상세 리포트<br/>(개별 MD 문서)"]
     G["📊 5단계: 통합 요약 리포트<br/>(비교 표 + 링크)"]
-    
     H[/"💾 6단계: 결과물 저장<br/>(.md & .json)"/]
     I([✅ 추천 프로세스 완료])
 
@@ -76,7 +68,7 @@ flowchart TD
     A ==>|파이썬 실행| B
     B ==>|3개 도시 루프| C
     C ==> D
-    D -. "위도/경도 데이터" .-> E
+    D -.->|위도/경도 데이터| E
     E ==> F
     F ==> G
     G ==> H
@@ -205,7 +197,6 @@ pip install -r requirements.txt
 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
 KAKAO_REST_API_KEY=xxxxxxxxxxxxxxxx
 ```
-⚠️ 주의 사항: API 키가 GitHub 등 외부에 유출되지 않도록 반드시 .env 파일을 사용하고, .gitignore에 .env를 추가하세요.
 
 ### 3. 프로그램 실행
 
