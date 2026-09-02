@@ -1,35 +1,45 @@
 # 🗺️ 국내 여행 추천 프로그램
 
-> OpenAI(gpt-4o-mini) + Kakao Local API를 활용한 AI 기반 국내 여행 추천 자동화 시스템으로, 여행 날짜에 최적화된 국내 대표 명소 및 숨은 소도시를 추천하고 일정별 맛집 동선까지 계산해 리포트를 자동 생성하는 파이프라인입니다.
-
+> OpenAI(gpt-4o-mini)와 Kakao Local API를 활용한 AI 기반 국내 여행 추천 자동화 시스템으로, 특정 날짜에 최적화된 국내 대표 명소 1곳과 숨은 소도시 2곳을 추천하고 일정별 맛집 동선까지 계산해 여행 리포트를 자동 생성하는 프로그램입니다.
 
 ---
 
 
-## 📌 프로그램 개요 및 특징
+## 📌 프로젝트 개요
 
-날짜를 입력하면 AI가 계절과 테마를 분석하여 전국 방방곡곡의 맞춤형 여행지와 맛집 동선을 자동으로 설계해 주는 CLI 기반 프로그램입니다.
+사용자가 입력한 날짜를 기준으로 다음 정보를 자동 생성합니다.
 
-* **차별화된 3색 도시 구성**
-  1곳의 전국 단위 대표 관광지와 2곳의 한적한 숨은 로컬 소도시(군 단위)를 조합하여 다채로운 여행 선택지를 제공합니다.
+- 여행 추천 도시 3곳
+  - 대표 도시 1곳
+  - 로컬 소도시 2곳
+- 각 도시별 추천 이유
+- 오전 / 오후 / 저녁 일정
+- 맛집 정보
+- 도시별 상세 리포트 및 전체 비교 요약 리포트
+- 원본 JSON 데이터 저장
 
-* **추천 다양성 고도화**
-  LLM의 창의성 파라미터(`temperature=0.95`, `presence_penalty=0.6`)를 튜닝하여 고정된 지역 편중을 막고, 매번 새롭고 계절에 맞는 최적의 결과를 유도합니다.
+---
 
-* **장소-맛집 근접 동선 연계**
-  1일 시간대별(오전/오후/저녁) 일정에 맞춰, 해당 스팟과 카카오 Local API로 수집된 맛집 간의 직선 거리를 계산해 최단 거리 맛집을 자동으로 매칭합니다.
+## ✨ 주요 특징
 
-* **정밀한 위치 데이터 및 실용적 장소 정보**
-  맛집의 위도/경도 좌표를 소수점 5자리(약 1.1m 정밀도)로 규격화하고, 카카오맵 별점(rating) 데이터를 함께 수록하여 리포트의 신뢰도를 높였습니다.
+- **날짜 기반 여행 추천**
+  - 사용자가 입력한 날짜를 기준으로 계절감과 분위기를 반영한 여행지를 추천합니다.
 
-* **안정적인 무중단 실행 (Fault Tolerance)**
-  API 통신 오류나 LLM의 JSON 파싱 실패 시 최대 3회 자동 재시도 로직이 작동하며, 치명적 오류 시에도 프로그램 멈춤 없이 우회하여 리포트를 정상 발행합니다.
+- **도시 간 비교가 가능한 3개 추천 결과**
+  - 대표 도시 1곳과 로컬 소도시 2곳을 함께 제시하여 여행 스타일을 비교할 수 있습니다.
 
-* **다중 포맷 결과물 자동 생성**
-  최종 결과물은 가독성 높은 2종의 Markdown 리포트(도시별 상세 리포트 + 전체 요약 리포트)와 모든 파싱 데이터 및 오류 로그가 담긴 JSON 원본 데이터로 나뉘어 `results/` 폴더에 안전하게 저장됩니다.
+- **도시별 1일 일정 자동 생성**
+  - 오전 / 오후 / 저녁 일정으로 구성된 실용적인 여행 계획을 제공합니다.
 
-* **직관적인 CLI 및 입력 검증**
-  터미널에서 `-date "YYYY-MM-DD"` 명령어 하나로 구동되며, 날짜 오입력 시 즉각적인 검증 안내를 제공하여 사용자 편의성을 높였습니다.
+- **정밀한 위치 데이터 및 실용적 장소 정보**
+  - 맛집의 위도/경도 좌표를 정리하고, 상호명/카테고리/주소/링크 등 실제 탐색에 필요한 정보를 함께 수록합니다.
+
+- **Markdown + JSON 결과 저장**
+  - 사람이 읽기 쉬운 Markdown 리포트와 후처리 가능한 JSON 데이터를 동시에 저장합니다.
+
+- **환경변수 기반 API 키 관리**
+  - 민감한 API 키를 코드에 직접 작성하지 않고 `.env` 파일 또는 운영 환경변수에서 불러옵니다.
+
 
 ---
 
@@ -71,7 +81,7 @@ flowchart TD
     H --> I
 ```
 
-### 📄 travel_planner.py 프로젝트 구조
+### 📄 프로젝트 구조
 
 ```
 travel_planner/
@@ -91,175 +101,254 @@ travel_planner/
 
 ## ⚙️ 핵심 함수 구성
 
-| 함수명 | 역할 |
+| 함수명 | 설명 |
 |---|---|
-| `parse_args()` | CLI 실행 인자(`--date`) 파싱 |
-| `calculate_distance()` | Haversine 수식을 통한 두 좌표 간 직선 거리(km) 계산 |
-| `get_place_coordinate()` | 일정 장소명을 카카오 로컬 API로 검색해 위도/경도 좌표 반환 |
-| `recommend_cities()` | OpenAI를 통해 대표 도시 1곳 + 숨은 소도시 2곳 추천 |
-| `recommend_schedule()` | OpenAI를 통해 오전/오후/저녁 1일 여행 일정 생성 |
-| `search_restaurants()` | Kakao API로 맛집 5~10곳 검색 (별점 및 소수점 5자리 좌표) |
-| `build_city_report()` | 맛집 리스트 및 근접 맛집이 연결된 도시별 마크다운 생성 |
-| `build_summary_report()`| 추천 도시 비교표가 포함된 전체 요약 마크다운 생성 |
-| `save_results()` | 생성된 리포트(.md) 및 원본 데이터(.json) 파일 저장 |
----
+| `parse_args()` | CLI 인자에서 여행 날짜를 입력받고 형식을 검증 |
+| `calculate_distance()` | 두 좌표 사이의 거리 계산 |
+| `get_place_coordinate()` | 장소명으로 위도/경도 조회 |
+| `recommend_cities()` | 여행 날짜 기반으로 3개 도시 추천 |
+| `recommend_schedule()` | 도시별 오전/오후/저녁 일정 생성 |
+| `search_restaurants()` | Kakao API로 도시별 맛집 검색 |
+| `build_city_report()` | 도시별 상세 Markdown 리포트 생성 |
+| `build_summary_report()` | 3개 도시 비교 요약 리포트 생성 |
+| `save_results()` | Markdown/JSON 결과 파일 저장 |
 
 ---
 
-## 📁 결과 파일 구성
+## 🧾 함수별 입력/출력 명세
 
-### 1. `summary_YYYY-MM-DD.md` - 전체 요약 리포트
+### `parse_args()`
+- 입력: CLI 인자 `--date YYYY-MM-DD`
+- 출력: `argparse.Namespace`
+- 역할: 실행 날짜를 파싱하고 날짜 형식을 검증합니다.
 
-```
-# 🗺️ YYYY-MM-DD 국내 여행 추천 요약
+### `calculate_distance(lat1, lon1, lat2, lon2)`
+- 입력: 두 지점의 위도/경도(float)
+- 출력: 두 좌표 사이의 직선 거리(km, float)
+- 역할: 일정 장소와 맛집 간의 거리 비교에 사용합니다.
 
-## 📍 추천 3개 도시 메타데이터 비교 테이블
-| 도시 | 행정구역 | 테마 | 날씨 | 맛집 수 |
-| :--- | :--- | :--- | :--- | :--- |
-| 제주도 | 제주특별자치도 | 자연 | 맑음 25도 | 10곳 |
-| 경주 | 경상북도 | 역사 | 맑음 28도 | 8곳 |
-| 부산 | 부산광역시 | 해양 | 맑음 27도 | 9곳 |
+### `get_place_coordinate(place_name)`
+- 입력: 장소명 문자열
+- 출력: `(latitude, longitude)` 튜플 또는 `None`
+- 역할: 카카오 로컬 API로 장소 좌표를 조회합니다.
 
-## 📑 도시별 핵심 요약 및 개별 리포트 파일 링크
-```
+### `recommend_cities(date_str, errors=None)`
+- 입력:
+  - `date_str`: 여행 날짜 문자열 (`YYYY-MM-DD`)
+  - `errors`: 오류 기록용 리스트(선택)
+- 출력: 도시 추천 정보 리스트
+- 역할: 대표 도시 1곳과 로컬 소도시 2곳을 추천합니다.
 
-### 2. `report_YYYY-MM-DD_도시명.md` - 도시별 상세 리포트
+### `recommend_schedule(city, theme, date_str, errors=None)`
+- 입력:
+  - `city`: 도시명
+  - `theme`: 여행 테마
+  - `date_str`: 여행 날짜
+  - `errors`: 오류 기록용 리스트(선택)
+- 출력: 오전/오후/저녁 일정 dict
+- 역할: 도시별 1일 일정을 생성합니다.
 
-```
-# 최종 여행 리포트: 도시명
+### `search_restaurants(city, errors=None)`
+- 입력:
+  - `city`: 도시명
+  - `errors`: 오류 기록용 리스트(선택)
+- 출력: 맛집 정보 리스트
+- 역할: 카카오 API로 도시별 맛집 후보를 조회합니다.
 
-1️⃣ 추천 지역 & 추천 이유   ← 도시/행정구역/테마/추천이유 표
-2️⃣ 날씨 요약               ← 날씨 한 줄 요약
-3️⃣ 행사/축제 목록           ← 해당 날짜 주변 행사
-4️⃣ 맛집 리스트              ← 상호명/카테고리/별점/주소/좌표(위도&경도)/링크
-5️⃣ 1일 여행 일정 및 알정 정소별 최단 거리 추천 맛집 매팅 표기   ← 오전/오후/저녁 활동/장소/팁
-```
+### `build_city_report(date_str, city_info, schedule, restaurants)`
+- 입력:
+  - `date_str`: 여행 날짜
+  - `city_info`: 도시 메타데이터 dict
+  - `schedule`: 일정 정보 dict
+  - `restaurants`: 맛집 리스트
+- 출력: Markdown 문자열
+- 역할: 도시별 상세 리포트를 생성합니다.
 
-### 3. `raw_YYYY-MM-DD.json` - 원본 JSON 데이터
-* 추천 정보, 일정, 맛집 전체 파싱 원천 데이터
+### `build_summary_report(date_str, cities_data)`
+- 입력:
+  - `date_str`: 여행 날짜
+  - `cities_data`: 도시별 결과 리스트
+- 출력: Markdown 문자열
+- 역할: 전체 비교 요약 리포트를 생성합니다.
 
-```json
-{
-  "date": "2026-08-31",
-  "cities": [
-    {
-      "info": {
-        "city": "제주도",
-        "region": "제주특별자치도",
-        "theme": "자연",
-        "weather": "온화하고 맑음, 평균 기온 25도",
-        "events": ["제주 바다의 날"],
-        "reason": "추천 이유..."
-      },
-      "schedule": {
-        "morning":   { "time": "09:00", "activity": "...", "place": "...", "tip": "..." },
-        "afternoon": { "time": "13:00", "activity": "...", "place": "...", "tip": "..." },
-        "evening":   { "time": "18:00", "activity": "...", "place": "...", "tip": "..." }
-      },
-      "restaurants": [
-        {
-          "place_name": "흑돼지 맛집",
-          "category_name": "음식점 > 한식",
-          "address_name": "제주시 ...",
-          "latitude": 33.123,
-          "longitude": 126.456,
-          "place_url": "https://place.map.kakao.com/..."
-        }
-      ]
-    }
-  ]
-}
-```
+### `save_results(date_str, cities_data, global_errors)`
+- 입력:
+  - `date_str`: 여행 날짜
+  - `cities_data`: 도시별 결과 리스트
+  - `global_errors`: 전체 오류 리스트
+- 출력:
+  - 저장 성공 시 `True`
+  - 저장 실패 시 `False`
+- 역할:
+  - 도시별 Markdown 리포트 저장
+  - 전체 요약 리포트 저장
+  - 원본 JSON 데이터 저장
+  - 저장 실패 시 오류를 기록합니다.
 
 ---
 
 ## ⚙️ 설치 및 실행
 
-### 1. 패키지 설치(requirements.txt)
-requirements.txt 파일에는 이 프로그램이 작동하기 위해 필요한 외부 라이브러리(OpenAI, dotenv 등)의 목록이 적혀 있습니다. 터미널에 아래 명령어를 입력하면 필요한 패키지가 한 번에 설치됩니다
+### 1. 저장소 클론
+
+```bash
+git clone <저장소_URL>
+cd <프로젝트_폴더명>
+```
+
+### 2. 패키지 설치
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 환경변수 설정 (.env.example ➔ .env)
-.env.example 파일은 어떤 API 키가 필요한지 보여주기 위한 '예시(템플릿)' 파일입니다. 실제 키를 설정하려면 다음 과정을 거쳐야 합니다.
+### 3. 환경변수 설정 (`.env.example` → `.env`)
 
-프로젝트 폴더에 .env 라는 이름의 새 파일을 만듭니다. (또는 .env.example을 복사하여 .env로 이름을 변경합니다.)
-
-발급받은 실제 API 키를 .env 파일 안에 붙여넣고 저장합니다.
+`.env.example` 파일을 참고하여 `.env` 파일을 생성합니다.
 
 ```env
 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
 KAKAO_REST_API_KEY=xxxxxxxxxxxxxxxx
 ```
 
-### 3. 프로그램 실행
+`.env` 파일은 로컬 개발용으로만 사용하고, Git 저장소에는 포함하지 않습니다.
+
+### 4. 프로그램 실행
 
 ```bash
-# 날짜 지정 실행
 python travel_planner.py --date "2026-08-31"
-
-# 오늘 날짜로 실행 (기본값)
-python travel_planner.py
 ```
+
+> `--date` 인자는 필수이며 `YYYY-MM-DD` 형식으로 입력해야 합니다.
 
 ---
 
-## 📦 requirements.txt
+## 📦 requirements.txt 예시
 
-```
+프로젝트에서 사용하는 주요 패키지는 다음과 같습니다.
+
+```txt
 openai
 requests
 python-dotenv
 ```
 
+실제 사용 패키지는 `requirements.txt` 파일을 기준으로 관리합니다.
+
 ---
 
 ## 🔑 API 키 발급
 
-| API | 발급 경로 | 용도 |
-|-----|-----------|------|
-| OpenAI | https://platform.openai.com | 도시 추천, 일정 생성 |
-| Kakao | https://developers.kakao.com | 맛집 검색 (로컬 API) |
+### 1. OpenAI API 키
+- OpenAI 플랫폼에서 발급
+- 환경변수 이름: `OPENAI_API_KEY`
+
+### 2. Kakao REST API 키
+- Kakao Developers에서 애플리케이션 생성 후 발급
+- 환경변수 이름: `KAKAO_REST_API_KEY`
 
 ---
+
+## 📁 결과 파일 구성
+
+실행이 완료되면 `results/` 폴더에 아래 파일들이 생성됩니다.
+
+### 1) `report_YYYY-MM-DD_도시명.md`
+도시별 상세 여행 리포트입니다.
+
+포함 내용:
+1. 도시 기본 정보
+2. 추천 이유
+3. 오전 / 오후 / 저녁 일정
+4. 맛집 리스트 (상호명 / 카테고리 / 주소 / 좌표 / 링크)
+
+### 2) `summary_YYYY-MM-DD.md`
+추천된 3개 도시를 비교한 전체 요약 리포트입니다.
+
+### 3) `raw_YYYY-MM-DD.json`
+도시 추천 결과, 일정 정보, 맛집 정보, 오류 로그 등을 담은 원본 데이터 파일입니다.
+
+```
 
 ## 📊 실행 예시
 
 ```bash
-$ python travel_planner.py --date "2026-08-31"
-
-========================================
-✅ 완료!
-========================================
-추천 도시: 제주도, 경주, 부산
-
-📁 저장된 파일:
-   - results/report_2026-08-31_제주도.md
-   - results/report_2026-08-31_경주.md
-   - results/report_2026-08-31_부산.md
-   - results/summary_2026-08-31.md
-   - results/raw_2026-08-31.json
-========================================
+python travel_planner.py --date "2026-10-03"
 ```
+
+예상 결과:
+- 3개 도시 추천
+- 도시별 일정 생성
+- 도시별 맛집 정보 수집
+- `results/` 폴더에 Markdown/JSON 파일 저장
 
 ---
 
-## ⚠️ 주의사항
+## ⚠️ 예외처리 및 주의사항
 
-- `.env` 파일은 절대 GitHub에 올리지 마세요 (`.gitignore` 등록 필수)
-- OpenAI API는 사용량에 따라 비용이 발생합니다
-- Kakao API는 일일 호출 한도가 있습니다
+- 날짜는 반드시 `YYYY-MM-DD` 형식으로 입력해야 합니다.
+- OpenAI API 응답이 예상 형식과 다를 경우 예외가 발생할 수 있습니다.
+- Kakao API 검색 결과가 부족하면 일부 장소 또는 맛집 정보가 비어 있을 수 있습니다.
+- 외부 API 호출 실패, 응답 지연, 네트워크 오류가 발생할 수 있습니다.
+- 결과 파일 저장 중 오류가 발생할 수 있으므로 저장 실패 여부를 확인해야 합니다.
+
+---
+
+## 환경변수 및 보안 주의사항
+
+이 프로젝트는 API 키를 코드에 직접 작성하지 않고 `.env` 파일 또는 운영 환경변수에서 불러옵니다.
+
+예시:
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+KAKAO_REST_API_KEY=your_kakao_rest_api_key_here
+
+---
+
+주의사항:
+- `.env` 파일은 절대 GitHub에 업로드하지 않습니다.
+- `.env.example`에는 실제 키가 아닌 예시 값만 넣습니다.
+- API 키가 노출되었다면 즉시 재발급해야 합니다.
+- 배포 환경에서는 `.env` 파일보다 서버 환경변수 설정 사용을 권장합니다.
 
 ---
 
 ## 📝 .gitignore 권장 설정
 
-```
+```gitignore
 .env
-logs/
-results/
 __pycache__/
+results/
 *.pyc
 ```
+---
+
+## 🚀 향후 개선 아이디어
+
+- 도시 추천 결과의 형식 검증 강화
+- 일정 데이터 구조 검증 로직 추가
+- 저장 실패 시 재시도 또는 상세 오류 메시지 제공
+- 사용자 선호 테마(자연, 먹거리, 역사, 감성 등) 직접 입력 기능 추가
+- 지도 시각화 또는 웹 UI 연동
+
+---
+
+## 📚 프로젝트 목적
+
+이 프로젝트는 다음 학습 목표를 바탕으로 제작되었습니다.
+
+- OpenAI API 활용
+- 외부 REST API 연동
+- 환경변수 기반 비밀정보 관리
+- JSON/Markdown 데이터 처리
+- 예외처리 및 결과 저장 구조 설계
+- 실사용 가능한 자동화 리포트 생성 경험
+
+---
+
+## 🙌 마무리
+
+이 프로젝트는 생성형 AI와 외부 위치 정보를 결합해  
+실제 여행 준비에 활용할 수 있는 자동화 도구를 만드는 데 목적이 있습니다.
+
+코드 품질을 높이기 위해 입력값 검증, 응답 구조 검증, 저장 예외처리 등을 계속 개선할 수 있습니다.

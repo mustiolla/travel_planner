@@ -125,7 +125,51 @@ def get_place_coordinate(place_name):
 # 1단계: 도시 추천 (1곳 대표 도시 + 2곳 숨은 소도시)
 # 👈 [여기가 1단계 코드 위치입니다!]
 # =============================================
-def recommend_cities(date_str):
+def validate_city_recommendations(data):
+    """도시 추천 결과 검증"""
+    if not isinstance(data, list) or len(data) != 3:
+        return False
+
+    required_keys = ["city", "region", "theme", "weather", "events", "reason"]
+
+    regions = []
+    cities = []
+
+    for item in data:
+        if not isinstance(item, dict):
+            return False
+
+        for key in required_keys:
+            if key not in item:
+                return False
+
+        if not isinstance(item["city"], str) or not item["city"].strip():
+            return False
+        if not isinstance(item["region"], str) or not item["region"].strip():
+            return False
+        if not isinstance(item["theme"], str) or not item["theme"].strip():
+            return False
+        if not isinstance(item["weather"], str):
+            return False
+        if not isinstance(item["events"], list):
+            return False
+        if not isinstance(item["reason"], str) or not item["reason"].strip():
+            return False
+
+        cities.append(item["city"].strip())
+        regions.append(item["region"].strip())
+
+    # 도시명 중복 방지
+    if len(set(cities)) != 3:
+        return False
+
+    # 광역자치단체 중복 방지
+    if len(set(regions)) != 3:
+        return False
+
+    return True
+
+def recommend_cities(date_str, errors=None):
     """1곳의 대표 도시 + 2곳의 숨은 명소/소도시 추천"""
     client = OpenAI(api_key=CONFIG["OPENAI_API_KEY"])
 
@@ -163,16 +207,21 @@ def recommend_cities(date_str):
             content = resp.choices[0].message.content
             parsed  = _safe_json(content)
 
-            if isinstance(parsed, list) and len(parsed) >= 3:
+            if validate_city_recommendations(parsed):
                 cities = [c.get("city", "") for c in parsed]
                 logging.info(f"도시 추천 성공: {', '.join(cities)}")
-                return parsed[:3]
+                return parsed
             else:
-                # 📌 이 부분을 추가해야 except 블록으로 넘어가서 정상적으로 재시도(time.sleep)를 합니다.
-                raise ValueError("JSON 파싱 실패 또는 반환 형태가 올바르지 않음")
+                raise ValueError("도시 추천 JSON 구조/필수값 검증 실패")
 
         except Exception as e:
             logging.warning(f"도시추천 재시도 {i+1}/{CONFIG['MAX_RETRIES']}: {e}")
+            if errors is not None:
+                errors.append({
+                    "stage": "recommend_cities_retry",
+                    "date": date_str,
+                    "error": str(e)
+                })
             time.sleep(1)
 
     logging.error("도시 추천 실패 → 기본값 사용")
@@ -185,7 +234,29 @@ def recommend_cities(date_str):
 # =============================================
 # 2단계: 하루 일정 추천 (오전/오후/저녁)
 # =============================================
-def recommend_schedule(city, theme, date_str):
+def validate_schedule(data):
+    """하루 일정 JSON 검증"""
+    if not isinstance(data, dict):
+        return False
+
+    periods = ["morning", "afternoon", "evening"]
+    fields = ["time", "activity", "place", "tip"]
+
+    for period in periods:
+        if period not in data:
+            return False
+        if not isinstance(data[period], dict):
+            return False
+
+        for field in fields:
+            if field not in data[period]:
+                return False
+            if not isinstance(data[period][field], str):
+                return False
+
+    return True
+
+def recommend_schedule(city, theme, date_str, errors=None):
     """도시별 오전/오후/저녁 일정 추천"""
     client = OpenAI(api_key=CONFIG["OPENAI_API_KEY"])
 
@@ -224,16 +295,28 @@ def recommend_schedule(city, theme, date_str):
             )
             content = resp.choices[0].message.content
             parsed  = _safe_json(content)
-            if parsed and "morning" in parsed:
+            if validate_schedule(parsed):
                 logging.info(f"[{city}] 일정 추천 성공")
                 return parsed
             else:
-                # 📌 이 부분을 추가해야 except 블록으로 넘어가서 정상적으로 재시도(time.sleep)를 합니다.
-                raise ValueError("JSON 파싱 실패 또는 반환 형태가 올바르지 않음")
+                raise ValueError("일정 추천 JSON 구조 검증 실패")
         except Exception as e:
             logging.warning(f"[{city}] 일정 재시도 {i+1}: {e}")
+            if errors is not None:
+                errors.append({
+                    "city": city,
+                    "stage": "recommend_schedule_retry",
+                    "error": str(e)
+                })
             time.sleep(1)
 
+    if errors is not None:
+        errors.append({
+            "city": city,
+            "stage": "recommend_schedule_fallback",
+            "error": "일정 추천 실패로 기본 일정 사용"
+        })
+    
     return {
         "morning":   {"time": "09:00~12:00", "activity": "오전 관광", "place": city, "tip": "-"},
         "afternoon": {"time": "13:00~17:00", "activity": "오후 관광", "place": city, "tip": "-"},
@@ -244,7 +327,7 @@ def recommend_schedule(city, theme, date_str):
 # =============================================
 # 3단계: 카카오 맛집 검색 (5~10곳, 별점 및 좌표 반올림)
 # =============================================
-def search_restaurants(city):
+def search_restaurants(city, errors=None):
     """카카오 API 맛집 검색 - 5~10곳 반환"""
     if not city:
         return []
@@ -262,6 +345,12 @@ def search_restaurants(city):
             documents = json.loads(body).get("documents", [])
     except Exception as e:
         logging.error(f"[{city}] Kakao API 실패: {e}")
+        if errors is not None:
+            errors.append({
+                "city": city,
+                "stage": "search_restaurants",
+                "error": str(e)
+            }) 
         return []
 
     results = []
@@ -272,7 +361,7 @@ def search_restaurants(city):
                 "address_name":  d.get("address_name", ""),
                 "category_name": d.get("category_name", ""),
                 "place_url":     d.get("place_url", ""),
-                "rating":        d.get("rating", "-"),  # 별점 필드
+                "rating":        None,  # 별점 필드, Kakao keyword search API는 rating 미제공
                 "longitude":     round(float(d.get("x", 0)), 5),  # 경도 (5자리)
                 "latitude":      round(float(d.get("y", 0)), 5),  # 위도 (5자리)
             })
@@ -333,12 +422,13 @@ def build_city_report(date_str, city_info, schedule, restaurants):
         md += "| # | 상호명 | 카테고리 | 별점 | 주소 | 위도 | 경도 | 링크 |\n"
         md += "|---|--------|----------|------|------|------|------|------|\n"
         for i, r in enumerate(restaurants, 1):
-            rating_val = r.get('rating', '-')
+            rating_val = r.get("rating")
+            rating_text = rating_val if rating_val not in (None, "") else "제공 안 됨"
             md += (
                 f"| {i} "
                 f"| {r['place_name']} "
                 f"| {r['category_name']} "
-                f"| {rating_val} "
+                f"| {rating_text} "
                 f"| {r['address_name']} "
                 f"| {r['latitude']:.5f} "
                 f"| {r['longitude']:.5f} "
@@ -430,44 +520,42 @@ def build_summary_report(date_str, cities_data):
 # =============================================
 # 6단계: 결과 저장
 # =============================================
-def save_results(date_str, cities_data, summary_md, errors):
-    out_dir = CONFIG["RESULTS_DIR"]
-    saved_files = []
+def save_results(date_str, cities_data, global_errors):
+    out_dir = "results"
+    os.makedirs(out_dir, exist_ok=True)
 
-    for item in cities_data:
-        city     = item["info"].get("city", "unknown")
-        city_md  = item["city_report"]
+    try:
+        # 도시별 markdown 저장
+        for item in cities_data:
+            city = item["info"].get("city", "unknown")
+            md_path = os.path.join(out_dir, f"report_{date_str}_{city}.md")
 
-        md_path = os.path.join(out_dir, f"report_{date_str}_{city}.md")
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write(city_md)
-        saved_files.append(md_path)
-        logging.info(f"[{city}] 리포트 저장: {md_path}")
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(item["city_report"])
 
-    summary_path = os.path.join(out_dir, f"summary_{date_str}.md")
-    with open(summary_path, "w", encoding="utf-8") as f:
-        f.write(summary_md)
-    saved_files.append(summary_path)
+            logging.info(f"[저장 성공] Markdown: {md_path}")
 
-    raw_data = {
-        "date": date_str,
-        "errors": errors,
-        "cities": [
-            {
-                "info":        item["info"],
-                "schedule":    item["schedule"],
-                "restaurants": item["restaurants"],
-            }
-            for item in cities_data
-        ]
-    }
-    raw_path = os.path.join(out_dir, f"raw_{date_str}.json")
-    with open(raw_path, "w", encoding="utf-8") as f:
-        json.dump(raw_data, f, ensure_ascii=False, indent=2)
-    saved_files.append(raw_path)
+        # raw json 저장
+        raw_path = os.path.join(out_dir, f"raw_{date_str}.json")
+        raw_data = {
+            "date": date_str,
+            "cities": cities_data,
+            "errors": global_errors,
+        }
 
-    logging.info(f"전체 저장 완료: {len(saved_files)}개 파일")
-    return saved_files
+        with open(raw_path, "w", encoding="utf-8") as f:
+            json.dump(raw_data, f, ensure_ascii=False, indent=2)
+
+        logging.info(f"[저장 성공] Raw JSON: {raw_path}")
+        return True
+
+    except Exception as e:
+        logging.exception(f"파일 저장 실패: {e}")
+        global_errors.append({
+            "stage": "save_results",
+            "error": str(e)
+        })
+        return False
 
 
 # =============================================
@@ -489,7 +577,7 @@ def main():
 
     # 1단계: 도시 3개 추천 (1곳 대표 + 2곳 숨은 소도시)
     logging.info("1단계: 도시 추천 중...")
-    cities_info = recommend_cities(date_str)
+    cities_info = recommend_cities(date_str, global_errors)
 
     # 2단계: 도시별 처리
     cities_data = []
@@ -500,11 +588,11 @@ def main():
 
         # 일정 추천
         logging.info(f"2단계: [{city}] 일정 추천 중...")
-        schedule = recommend_schedule(city, theme, date_str)
+        schedule = recommend_schedule(city, theme, date_str, global_errors)
 
         # 맛집 검색
         logging.info(f"3단계: [{city}] 맛집 검색 중...")
-        restaurants = search_restaurants(city)
+        restaurants = search_restaurants(city, global_errors)
 
         # 도시별 최종 리포트 생성
         logging.info(f"4단계: [{city}] 리포트 생성 중...")
@@ -525,7 +613,9 @@ def main():
 
     # 6단계: 저장할 때 errors 리스트도 넘겨주기
     logging.info("6단계: 결과 저장 중...")
-    saved_files = save_results(date_str, cities_data, summary_md, global_errors)
+    saved = save_results(date_str, cities_data, global_errors)
+    if not saved:
+        logging.error("결과 저장에 실패했습니다.")
 
     print("\n" + "="*40)
     print("✅ 완료!")
