@@ -7,6 +7,7 @@ travel_planner.py - 국내 여행 추천 프로그램 v3.1
 4. 일정별 추천 장소와 가장 가까운 맛집 거리 매칭 표시
 """
 
+import re
 import os
 import sys
 import json
@@ -197,15 +198,25 @@ def recommend_cities(date_str, errors=None):
     )
 
     for i in range(CONFIG["MAX_RETRIES"]):
+        # ---------------------------------------------------------
+        # 재시도 시 프롬프트 보강 전략
+        # ---------------------------------------------------------
+        current_prompt = prompt
+        if i > 0:
+            current_prompt += (
+                "\n\n주의: 이전 응답이 형식을 지키지 않았습니다. "
+                "반드시 다른 설명 없이 JSON 배열만 반환하세요."
+            )
+
         try:
             resp = client.chat.completions.create(
                 model=CONFIG["MODEL"],
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.95,          # 창의성/다양성 대폭 상향
-                presence_penalty=0.6,     # 새로운 주제/도시 탐색 유도
+                messages=[{"role": "user", "content": current_prompt}],
+                temperature=0.95,
+                presence_penalty=0.6,
             )
             content = resp.choices[0].message.content
-            parsed  = _safe_json(content)
+            parsed = _safe_json(content)
 
             if validate_city_recommendations(parsed):
                 cities = [c.get("city", "") for c in parsed]
@@ -216,13 +227,13 @@ def recommend_cities(date_str, errors=None):
 
         except Exception as e:
             logging.warning(f"도시추천 재시도 {i+1}/{CONFIG['MAX_RETRIES']}: {e}")
-            if errors is not None:
-                errors.append({
-                    "stage": "recommend_cities_retry",
-                    "date": date_str,
-                    "error": str(e)
-                })
-            time.sleep(1)
+        if errors is not None:
+            errors.append({
+                "stage": "recommend_cities_retry",
+                "date": date_str,
+                "error": str(e)
+            })
+        time.sleep(1)
 
     logging.error("도시 추천 실패 → 기본값 사용")
     return [
@@ -287,14 +298,21 @@ def recommend_schedule(city, theme, date_str, errors=None):
     )
 
     for i in range(CONFIG["MAX_RETRIES"]):
+        current_prompt = prompt
+        if i > 0:
+            current_prompt += (
+                "\n\n주의: 이전 응답이 형식을 지키지 않았습니다. "
+                "반드시 다른 설명 없이 JSON 객체만 반환하세요."
+            )
+
         try:
             resp = client.chat.completions.create(
                 model=CONFIG["MODEL"],
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": current_prompt}],
                 temperature=0.7,
             )
             content = resp.choices[0].message.content
-            parsed  = _safe_json(content)
+            parsed = _safe_json(content)
             if validate_schedule(parsed):
                 logging.info(f"[{city}] 일정 추천 성공")
                 return parsed
@@ -302,13 +320,13 @@ def recommend_schedule(city, theme, date_str, errors=None):
                 raise ValueError("일정 추천 JSON 구조 검증 실패")
         except Exception as e:
             logging.warning(f"[{city}] 일정 재시도 {i+1}: {e}")
-            if errors is not None:
-                errors.append({
-                    "city": city,
-                    "stage": "recommend_schedule_retry",
-                    "error": str(e)
-                })
-            time.sleep(1)
+        if errors is not None:
+            errors.append({
+                "city": city,
+                "stage": "recommend_schedule_retry",
+                "error": str(e)
+            })
+        time.sleep(1)
 
     if errors is not None:
         errors.append({
@@ -523,6 +541,7 @@ def build_summary_report(date_str, cities_data):
 def save_results(date_str, cities_data, global_errors):
     out_dir = "results"
     os.makedirs(out_dir, exist_ok=True)
+    saved_files = []
 
     try:
         # 도시별 markdown 저장
@@ -533,6 +552,7 @@ def save_results(date_str, cities_data, global_errors):
             with open(md_path, "w", encoding="utf-8") as f:
                 f.write(item["city_report"])
 
+            saved_files.append(md_path)
             logging.info(f"[저장 성공] Markdown: {md_path}")
 
         # raw json 저장
@@ -546,8 +566,9 @@ def save_results(date_str, cities_data, global_errors):
         with open(raw_path, "w", encoding="utf-8") as f:
             json.dump(raw_data, f, ensure_ascii=False, indent=2)
 
+        saved_files.append(raw_path)
         logging.info(f"[저장 성공] Raw JSON: {raw_path}")
-        return True
+        return saved_files
 
     except Exception as e:
         logging.exception(f"파일 저장 실패: {e}")
@@ -555,7 +576,7 @@ def save_results(date_str, cities_data, global_errors):
             "stage": "save_results",
             "error": str(e)
         })
-        return False
+        return []
 
 
 # =============================================
@@ -582,7 +603,16 @@ def main():
     # 2단계: 도시별 처리
     cities_data = []
     for city_info in cities_info:
-        city  = city_info.get("city", "서울")
+        raw_city = city_info.get("city", "서울")
+
+        # ---------------------------------------------------------
+        # 입력 데이터 정규화 (공백 제거 및 표준화)
+        # 예: "서울시 " -> "서울", " 하동군" -> "하동"
+        # 내부 글자는 건드리지 않고 끝의 시/군만 제거
+        # ---------------------------------------------------------
+        city = re.sub(r"(시|군)\s*$", "", raw_city.strip())
+        # ---------------------------------------------------------
+
         theme = city_info.get("theme", "도시")
         logging.info(f"--- [{city}] 처리 시작 ---")
 
@@ -599,24 +629,24 @@ def main():
         city_report = build_city_report(date_str, city_info, schedule, restaurants)
 
         cities_data.append({
-            "info":        city_info,
-            "schedule":    schedule,
+            "info": city_info,
+            "schedule": schedule,
             "restaurants": restaurants,
             "city_report": city_report,
         })
 
-        time.sleep(0.5)
-
+    time.sleep(0.5)
+    
     # 5단계: 전체 요약 리포트
     logging.info("5단계: 전체 요약 리포트 생성 중...")
     summary_md = build_summary_report(date_str, cities_data)
 
     # 6단계: 저장할 때 errors 리스트도 넘겨주기
     logging.info("6단계: 결과 저장 중...")
-    saved = save_results(date_str, cities_data, global_errors)
-    if not saved:
-        logging.error("결과 저장에 실패했습니다.")
+    saved_files = save_results(date_str, cities_data, global_errors)
 
+    if not saved_files:
+        logging.error("결과 저장에 실패했습니다.")
     print("\n" + "="*40)
     print("✅ 완료!")
     print("="*40)
