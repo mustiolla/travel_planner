@@ -533,13 +533,15 @@ def build_summary_report(date_str, cities_data, global_errors):
 
         md += f"- **상세 리포트:** `report_{date_str}_{city}.md`\n\n"
 
-    # 에러 내역 추가 (체크리스트 요구사항)
+    # 📌 에러 내역 추가 (에러가 없으면 '에러사항 없음' 출력)
+    md += "---\n\n"
+    md += "## ⚠️ 시스템 알림 (에러 로그)\n\n"
     if global_errors:
-        md += "---\n\n"
-        md += "## ⚠️ 시스템 알림 (에러 로그)\n\n"
         for err in global_errors:
             md += f"- **[{err.get('stage')}]** {err.get('error')} (대상: {err.get('city', '공통')})\n"
-        md += "\n"
+    else:
+        md += "- ✅ 에러사항 없음\n"
+    md += "\n"
 
     md += "---\n\n"
     md += "> 각 도시 상세 리포트를 확인하세요! 🎒\n"
