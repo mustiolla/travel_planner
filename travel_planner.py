@@ -1,10 +1,11 @@
 """
-travel_planner.py - 국내 여행 추천 프로그램 v3.1
+travel_planner.py - 국내 여행 추천 프로그램 v3.2
 변경: 
 1. 1번 대표 도시 + 2, 3번 숨은 소도시/군 단위 추천
-2. 위도/경도 소수점 5자리 반올림
+2. 위도/경도 소수점 5자리 반올림, 거리 소수점 2자리 반올림
 3. 맛집 테이블에 별점(rating) 컬럼 추가
 4. 일정별 추천 장소와 가장 가까운 맛집 거리 매칭 표시
+5. 필수 키 변경 (city -> recommended_city) 및 캐싱/에러로그 기능 추가
 """
 
 import re
@@ -97,6 +98,8 @@ def calculate_distance(lat1, lon1, lat2, lon2):
          math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * 
          math.sin(dlon / 2) ** 2)
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    
+    # 리포트 가독성을 위해 소수점 2자리로 반올림
     return round(R * c, 2)
 
 
@@ -124,14 +127,14 @@ def get_place_coordinate(place_name):
 
 # =============================================
 # 1단계: 도시 추천 (1곳 대표 도시 + 2곳 숨은 소도시)
-# 👈 [여기가 1단계 코드 위치입니다!]
 # =============================================
 def validate_city_recommendations(data):
     """도시 추천 결과 검증"""
     if not isinstance(data, list) or len(data) != 3:
         return False
 
-    required_keys = ["city", "region", "theme", "weather", "events", "reason"]
+    # 요구사항에 맞게 city -> recommended_city 로 변경
+    required_keys = ["recommended_city", "region", "theme", "weather", "events", "reason"]
 
     regions = []
     cities = []
@@ -144,7 +147,7 @@ def validate_city_recommendations(data):
             if key not in item:
                 return False
 
-        if not isinstance(item["city"], str) or not item["city"].strip():
+        if not isinstance(item["recommended_city"], str) or not item["recommended_city"].strip():
             return False
         if not isinstance(item["region"], str) or not item["region"].strip():
             return False
@@ -157,7 +160,7 @@ def validate_city_recommendations(data):
         if not isinstance(item["reason"], str) or not item["reason"].strip():
             return False
 
-        cities.append(item["city"].strip())
+        cities.append(item["recommended_city"].strip())
         regions.append(item["region"].strip())
 
     # 도시명 중복 방지
@@ -187,7 +190,7 @@ def recommend_cities(date_str, errors=None):
         "반드시 아래 JSON 배열 형식으로만 답변 (추가 텍스트 없이 JSON만 반환):\n"
         "[\n"
         "  {\n"
-        '    "city": "도시/지역명 (예: 시/군 명확히 기재)",\n'
+        '    "recommended_city": "도시/지역명 (예: 시/군 명확히 기재)",\n'
         '    "region": "행정구역",\n'
         '    "theme": "여행 테마",\n'
         '    "weather": "예상 날씨",\n'
@@ -219,7 +222,7 @@ def recommend_cities(date_str, errors=None):
             parsed = _safe_json(content)
 
             if validate_city_recommendations(parsed):
-                cities = [c.get("city", "") for c in parsed]
+                cities = [c.get("recommended_city", "") for c in parsed]
                 logging.info(f"도시 추천 성공: {', '.join(cities)}")
                 return parsed
             else:
@@ -237,9 +240,9 @@ def recommend_cities(date_str, errors=None):
 
     logging.error("도시 추천 실패 → 기본값 사용")
     return [
-        {"city": "속초시", "region": "강원도", "theme": "해양/미식", "weather": "정보 없음", "events": [], "reason": "대표 인기 바다 여행지"},
-        {"city": "태안군", "region": "충청남도", "theme": "자연/일몰", "weather": "정보 없음", "events": [], "reason": "서해안의 고즈넉한 해변과 자연 휴양"},
-        {"city": "하동군", "region": "경상남도", "theme": "힐링/다원", "weather": "정보 없음", "events": [], "reason": "섬진강변의 차밭과 힐링 소도시"},
+        {"recommended_city": "속초시", "region": "강원도", "theme": "해양/미식", "weather": "정보 없음", "events": [], "reason": "대표 인기 바다 여행지"},
+        {"recommended_city": "태안군", "region": "충청남도", "theme": "자연/일몰", "weather": "정보 없음", "events": [], "reason": "서해안의 고즈넉한 해변과 자연 휴양"},
+        {"recommended_city": "하동군", "region": "경상남도", "theme": "힐링/다원", "weather": "정보 없음", "events": [], "reason": "섬진강변의 차밭과 힐링 소도시"},
     ]
 
 # =============================================
@@ -401,7 +404,7 @@ def search_restaurants(city, errors=None):
 # 4단계: 도시별 최종 리포트 생성 (가까운 맛집 매칭 포함)
 # =============================================
 def build_city_report(date_str, city_info, schedule, restaurants):
-    city   = city_info.get("city",   "정보 없음")
+    city   = city_info.get("recommended_city",   "정보 없음")
     region = city_info.get("region", "")
     theme  = city_info.get("theme",  "")
     weather = city_info.get("weather", "정보 없음")
@@ -493,7 +496,7 @@ def build_city_report(date_str, city_info, schedule, restaurants):
 # =============================================
 # 5단계: 전체 요약 리포트 생성
 # =============================================
-def build_summary_report(date_str, cities_data):
+def build_summary_report(date_str, cities_data, global_errors):
     """2~3개 도시 전체 요약 리포트"""
     md  = f"# 🗺️ {date_str} 국내 여행 추천 요약\n\n"
     md += f"> 생성: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
@@ -507,7 +510,7 @@ def build_summary_report(date_str, cities_data):
         info = item["info"]
         cnt  = len(item["restaurants"])
         md += (
-            f"| {info['city']} "
+            f"| {info['recommended_city']} "
             f"| {info['region']} "
             f"| {info['theme']} "
             f"| {info['weather']} "
@@ -518,7 +521,7 @@ def build_summary_report(date_str, cities_data):
     # 도시별 요약
     for idx, item in enumerate(cities_data, 1):
         info = item["info"]
-        city = info.get("city", "")
+        city = info.get("recommended_city", "")
         md += f"## {idx}. {city} 요약\n\n"
         md += f"- **추천 이유:** {info.get('reason', '-')}\n"
         md += f"- **날씨:** {info.get('weather', '-')}\n"
@@ -530,6 +533,14 @@ def build_summary_report(date_str, cities_data):
 
         md += f"- **상세 리포트:** `report_{date_str}_{city}.md`\n\n"
 
+    # 에러 내역 추가 (체크리스트 요구사항)
+    if global_errors:
+        md += "---\n\n"
+        md += "## ⚠️ 시스템 알림 (에러 로그)\n\n"
+        for err in global_errors:
+            md += f"- **[{err.get('stage')}]** {err.get('error')} (대상: {err.get('city', '공통')})\n"
+        md += "\n"
+
     md += "---\n\n"
     md += "> 각 도시 상세 리포트를 확인하세요! 🎒\n"
     return md
@@ -538,22 +549,29 @@ def build_summary_report(date_str, cities_data):
 # =============================================
 # 6단계: 결과 저장
 # =============================================
-def save_results(date_str, cities_data, global_errors):
+def save_results(date_str, cities_data, summary_md, global_errors):
     out_dir = "results"
     os.makedirs(out_dir, exist_ok=True)
     saved_files = []
 
     try:
+        # 요약 리포트 저장 추가
+        summary_path = os.path.join(out_dir, f"summary_report_{date_str}.md")
+        with open(summary_path, "w", encoding="utf-8") as f:
+            f.write(summary_md)
+        saved_files.append(summary_path)
+        logging.info(f"[저장 성공] Summary Markdown: {summary_path}")
+
         # 도시별 markdown 저장
         for item in cities_data:
-            city = item["info"].get("city", "unknown")
+            city = item["info"].get("recommended_city", "unknown")
             md_path = os.path.join(out_dir, f"report_{date_str}_{city}.md")
 
             with open(md_path, "w", encoding="utf-8") as f:
                 f.write(item["city_report"])
 
             saved_files.append(md_path)
-            logging.info(f"[저장 성공] Markdown: {md_path}")
+            logging.info(f"[저장 성공] City Markdown: {md_path}")
 
         # raw json 저장
         raw_path = os.path.join(out_dir, f"raw_{date_str}.json")
@@ -596,61 +614,74 @@ def main():
         logging.error("KAKAO_REST_API_KEY 미설정")
         sys.exit(1)
 
-    # 1단계: 도시 3개 추천 (1곳 대표 + 2곳 숨은 소도시)
-    logging.info("1단계: 도시 추천 중...")
-    cities_info = recommend_cities(date_str, global_errors)
-
-    # 2단계: 도시별 처리
-    cities_data = []
-    for city_info in cities_info:
-        raw_city = city_info.get("city", "서울")
-
-        # ---------------------------------------------------------
-        # 입력 데이터 정규화 (공백 제거 및 표준화)
-        # 예: "서울시 " -> "서울", " 하동군" -> "하동"
-        # 내부 글자는 건드리지 않고 끝의 시/군만 제거
-        # ---------------------------------------------------------
-        city = re.sub(r"(시|군)\s*$", "", raw_city.strip())
-        # ---------------------------------------------------------
-
-        theme = city_info.get("theme", "도시")
-        logging.info(f"--- [{city}] 처리 시작 ---")
-
-        # 일정 추천
-        logging.info(f"2단계: [{city}] 일정 추천 중...")
-        schedule = recommend_schedule(city, theme, date_str, global_errors)
-
-        # 맛집 검색
-        logging.info(f"3단계: [{city}] 맛집 검색 중...")
-        restaurants = search_restaurants(city, global_errors)
-
-        # 도시별 최종 리포트 생성
-        logging.info(f"4단계: [{city}] 리포트 생성 중...")
-        city_report = build_city_report(date_str, city_info, schedule, restaurants)
-
-        cities_data.append({
-            "info": city_info,
-            "schedule": schedule,
-            "restaurants": restaurants,
-            "city_report": city_report,
-        })
-
-    time.sleep(0.5)
+    # 📌 [캐싱 로직 추가] 동일 날짜의 JSON 파일이 있으면 API 호출 생략
+    raw_path = os.path.join(CONFIG["RESULTS_DIR"], f"raw_{date_str}.json")
     
-    # 5단계: 전체 요약 리포트
-    logging.info("5단계: 전체 요약 리포트 생성 중...")
-    summary_md = build_summary_report(date_str, cities_data)
+    if os.path.exists(raw_path):
+        logging.info("♻️ 이미 검색된 날짜입니다! 캐시된 데이터를 불러옵니다. (API 비용 절감)")
+        with open(raw_path, "r", encoding="utf-8") as f:
+            cached_data = json.load(f)
+        
+        cities_data = cached_data.get("cities", [])
+        global_errors = cached_data.get("errors", [])
+        
+    else:
+        # 캐시가 없을 때만 정상적으로 1~4단계 API 호출 진행
+        # 1단계: 도시 3개 추천 (1곳 대표 + 2곳 숨은 소도시)
+        logging.info("1단계: 도시 추천 중...")
+        cities_info = recommend_cities(date_str, global_errors)
 
-    # 6단계: 저장할 때 errors 리스트도 넘겨주기
+        # 2단계: 도시별 처리
+        cities_data = []
+        for city_info in cities_info:
+            raw_city = city_info.get("recommended_city", "서울")
+
+            # ---------------------------------------------------------
+            # 입력 데이터 정규화 (공백 제거 및 표준화)
+            # 예: "서울시 " -> "서울", " 하동군" -> "하동"
+            # 내부 글자는 건드리지 않고 끝의 시/군만 제거
+            # ---------------------------------------------------------
+            city = re.sub(r"(시|군)\s*$", "", raw_city.strip())
+            # ---------------------------------------------------------
+
+            theme = city_info.get("theme", "도시")
+            logging.info(f"--- [{city}] 처리 시작 ---")
+
+            # 일정 추천
+            logging.info(f"2단계: [{city}] 일정 추천 중...")
+            schedule = recommend_schedule(city, theme, date_str, global_errors)
+
+            # 맛집 검색
+            logging.info(f"3단계: [{city}] 맛집 검색 중...")
+            restaurants = search_restaurants(city, global_errors)
+
+            # 도시별 최종 리포트 생성
+            logging.info(f"4단계: [{city}] 리포트 생성 중...")
+            city_report = build_city_report(date_str, city_info, schedule, restaurants)
+
+            cities_data.append({
+                "info": city_info,
+                "schedule": schedule,
+                "restaurants": restaurants,
+                "city_report": city_report,
+            })
+
+            time.sleep(0.5)
+    
+    # 5단계: 전체 요약 리포트 (에러 내역 포함)
+    logging.info("5단계: 전체 요약 리포트 생성 중...")
+    summary_md = build_summary_report(date_str, cities_data, global_errors)
+
+    # 6단계: 저장할 때 summary_md 와 errors 리스트도 넘겨주기
     logging.info("6단계: 결과 저장 중...")
-    saved_files = save_results(date_str, cities_data, global_errors)
+    saved_files = save_results(date_str, cities_data, summary_md, global_errors)
 
     if not saved_files:
         logging.error("결과 저장에 실패했습니다.")
     print("\n" + "="*40)
     print("✅ 완료!")
     print("="*40)
-    print(f"추천 도시: {', '.join([c['info']['city'] for c in cities_data])}")
+    print(f"추천 도시: {', '.join([c['info']['recommended_city'] for c in cities_data])}")
     print("\n📁 저장된 파일:")
     for f in saved_files:
         print(f"   - {f}")
